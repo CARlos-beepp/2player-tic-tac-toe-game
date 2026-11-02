@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tic-tac-toe by Pradipta</title>
+<style>
+:root{
+  --bg:#e6f0f1; --panel:#f7fbfb; --ink:#12303a; --muted:#4d6b73; --line:#12303a;
+  --x:#c2410c; --o:#0f766e; --win:rgba(194,65,12,.14);
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e2830; --panel:#14363f; --ink:#e6f2f1; --muted:#9bbcc1; --line:#7fa9b0;
+    --x:#fbbf24; --o:#5eead4; --win:rgba(251,191,36,.16); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e2830; --panel:#14363f; --ink:#e6f2f1; --muted:#9bbcc1; --line:#7fa9b0;
+  --x:#fbbf24; --o:#5eead4; --win:rgba(251,191,36,.16); color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+  font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;display:flex;justify-content:center;padding:24px 16px}
+main{width:100%;max-width:420px;display:flex;flex-direction:column;gap:18px}
+h1{margin:0;font-size:2rem;letter-spacing:-.02em;line-height:1.1}
+.sub{margin:4px 0 0;color:var(--muted);font-size:.95rem}
+.modes{display:flex;gap:6px;background:var(--panel);padding:5px;border-radius:12px}
+.modes button{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;font-size:.9rem;
+  padding:9px 6px;border-radius:8px;cursor:pointer}
+.modes button[aria-pressed="true"]{background:var(--ink);color:var(--bg);font-weight:700}
+button:focus-visible{outline:3px solid var(--x);outline-offset:2px}
+#status{min-height:1.6em;font-size:1.15rem;font-weight:700}
+.board{display:grid;grid-template-columns:repeat(3,1fr);aspect-ratio:1;gap:0}
+.cell{background:transparent;border:0;padding:0;cursor:pointer;position:relative;
+  border-right:3px solid var(--line);border-bottom:3px solid var(--line)}
+.cell:nth-child(3n){border-right:0}
+.cell:nth-child(n+7){border-bottom:0}
+.cell:disabled{cursor:default}
+.cell:not(:disabled):hover{background:var(--panel)}
+.cell.win{background:var(--win)}
+.cell svg{width:62%;height:62%;position:absolute;inset:0;margin:auto;overflow:visible}
+.cell path,.cell circle{fill:none;stroke-width:9;stroke-linecap:round;
+  stroke-dasharray:100;stroke-dashoffset:100;animation:draw .28s ease-out forwards}
+.cell .x{stroke:var(--x)} .cell .o{stroke:var(--o)}
+.cell path+path{animation-delay:.14s}
+@keyframes draw{to{stroke-dashoffset:0}}
+.score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.score div{background:var(--panel);border-radius:12px;padding:10px 6px}
+.score b{display:block;font-size:1.6rem}
+.score span{font-size:.85rem;color:var(--muted)}
+#sx b{color:var(--x)} #so b{color:var(--o)}
+.again{border:0;background:var(--ink);color:var(--bg);font:inherit;font-weight:700;padding:13px;border-radius:12px;cursor:pointer}
+footer{font-size:.85rem;color:var(--muted);text-align:center}
+@media (prefers-reduced-motion:reduce){.cell path,.cell circle{animation:none;stroke-dashoffset:0}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Tic-tac-toe</h1>
+    <p class="sub">You’re X. Get three in a row.</p>
+  </header>
+  <div class="modes" role="group" aria-label="Game mode">
+    <button data-mode="easy" aria-pressed="false">Easy</button>
+    <button data-mode="hard" aria-pressed="true">Unbeatable</button>
+    <button data-mode="two" aria-pressed="false">2 players</button>
+  </div>
+  <div id="status" aria-live="polite"></div>
+  <div class="board" id="board" role="grid" aria-label="Tic-tac-toe board"></div>
+  <div class="score">
+    <div id="sx"><b>0</b><span>X wins</span></div>
+    <div id="sd"><b>0</b><span>Draws</span></div>
+    <div id="so"><b>0</b><span>O wins</span></div>
+  </div>
+  <button class="again" id="again">New game</button>
+  <footer>Built by Pradipta Bhattarai</footer>
+</main>
+<script>
+(function(){
+  var LINES=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  var X_SVG='<svg viewBox="0 0 100 100"><path class="x" pathLength="100" d="M15 15 L85 85"/><path class="x" pathLength="100" d="M85 15 L15 85"/></svg>';
+  var O_SVG='<svg viewBox="0 0 100 100"><circle class="o" pathLength="100" cx="50" cy="50" r="36"/></svg>';
+  var boardEl=document.getElementById('board'), statusEl=document.getElementById('status');
+  var board, turn, over, mode='hard', starter='X', scores={X:0,D:0,O:0}, cells=[], lock=false;
+
+  for(var i=0;i<9;i++){
+    var b=document.createElement('button');
+    b.className='cell'; b.setAttribute('role','gridcell'); b.setAttribute('aria-label','Square '+(i+1));
+    b.addEventListener('click',(function(n){return function(){play(n)}})(i));
+    boardEl.appendChild(b); cells.push(b);
+  }
+
+  function winner(bd){
+    for(var i=0;i<LINES.length;i++){
+      var l=LINES[i];
+      if(bd[l[0]]&&bd[l[0]]===bd[l[1]]&&bd[l[0]]===bd[l[2]]) return {p:bd[l[0]],line:l};
+    }
+    return null;
+  }
+  function empties(bd){var r=[];for(var i=0;i<9;i++)if(!bd[i])r.push(i);return r}
+
+  function minimax(bd,p,depth){
+    var w=winner(bd);
+    if(w) return w.p==='O'?10-depth:depth-10;
+    var e=empties(bd); if(!e.length) return 0;
+    var best=p==='O'?-99:99;
+    for(var i=0;i<e.length;i++){
+      bd[e[i]]=p;
+      var s=minimax(bd,p==='O'?'X':'O',depth+1);
+      bd[e[i]]='';
+      best=p==='O'?Math.max(best,s):Math.min(best,s);
+    }
+    return best;
+  }
+  function bestMove(){
+    var e=empties(board), top=-99, picks=[];
+    e.forEach(function(m){
+      board[m]='O'; var s=minimax(board,'X',1); board[m]='';
+      if(s>top){top=s;picks=[m]} else if(s===top) picks.push(m);
+    });
+    return picks[Math.floor(Math.random()*picks.length)];
+  }
+  function cpuMove(){
+    var e=empties(board);
+    return mode==='easy'?e[Math.floor(Math.random()*e.length)]:bestMove();
+  }
+
+  function render(){
+    cells.forEach(function(c,i){
+      c.innerHTML=board[i]==='X'?X_SVG:board[i]==='O'?O_SVG:'';
+      c.disabled=over||!!board[i]||lock;
+    });
+  }
+  function setStatus(){
+    if(over)return;
+    if(mode==='two') statusEl.textContent=turn+'’s turn';
+    else statusEl.textContent=turn==='X'?'Your turn':'Computer is thinking…';
+  }
+  function finish(){
+    var w=winner(board);
+    if(w){
+      over=true; scores[w.p]++;
+      w.line.forEach(function(i){cells[i].classList.add('win')});
+      statusEl.textContent=mode==='two'?w.p+' wins!':(w.p==='X'?'You win!':'Computer wins');
+    } else if(!empties(board).length){
+      over=true; scores.D++; statusEl.textContent='It’s a draw';
+    }
+    if(over){
+      document.querySelector('#sx b').textContent=scores.X;
+      document.querySelector('#sd b').textContent=scores.D;
+      document.querySelector('#so b').textContent=scores.O;
+    }
+    return over;
+  }
+  function play(i){
+    if(over||board[i]||lock)return;
+    board[i]=turn; render();
+    if(finish()){render();return}
+    turn=turn==='X'?'O':'X'; setStatus();
+    if(mode!=='two'&&turn==='O'){
+      lock=true; render();
+      setTimeout(function(){
+        lock=false;
+        var m=cpuMove(); board[m]='O';
+        if(!finish()){turn='X';setStatus()}
+        render();
+      },450);
+    }
+  }
+  function start(){
+    board=['','','','','','','','',''];
+    over=false; lock=false; turn=starter;
+    cells.forEach(function(c){c.classList.remove('win')});
+    render(); setStatus();
+    if(mode!=='two'&&turn==='O'){
+      lock=true; render();
+      setTimeout(function(){
+        lock=false; board[cpuMove()]='O'; turn='X'; setStatus(); render();
+      },450);
+    }
+  }
+  document.getElementById('again').addEventListener('click',function(){
+    starter=starter==='X'?'O':'X'; start();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.modes button'),function(btn){
+    btn.addEventListener('click',function(){
+      mode=btn.dataset.mode;
+      Array.prototype.forEach.call(document.querySelectorAll('.modes button'),function(o){
+        o.setAttribute('aria-pressed',o===btn?'true':'false');
+      });
+      document.querySelector('.sub').textContent=mode==='two'?'X goes first. Take turns.':'You’re X. Get three in a row.';
+      scores={X:0,D:0,O:0}; starter='X';
+      document.querySelectorAll('.score b').forEach(function(b){b.textContent='0'});
+      start();
+    });
+  });
+  start();
+})();
+</script>
+</body>
+</html>
